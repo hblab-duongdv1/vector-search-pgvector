@@ -1,0 +1,105 @@
+generator client {
+  provider                    = "prisma-client-py"
+  interface                   = "asyncio"
+  recursive_type_depth        = -1
+  enable_experimental_decimal = true
+  previewFeatures             = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [pgvector(map: "vector")]
+}
+
+enum ProductStatus {
+  ACTIVE
+  INACTIVE
+  DRAFT
+  DISCONTINUED
+}
+
+model Product {
+  id                String           @id @default(cuid())
+  sku               String           @unique
+  name              String
+  description       String?
+  price             Decimal          @db.Decimal(12, 2)
+  compareAtPrice    Decimal?         @db.Decimal(12, 2)
+  costPrice         Decimal?         @db.Decimal(12, 2)
+  categoryId        String?
+  subCategoryId     String?
+  brandId           String?
+  stockQty          Int              @default(0)
+  lowStockThreshold Int              @default(5)
+  weight            Float?
+  weightUnit        String           @default("kg")
+  width             Float?
+  height            Float?
+  depth             Float?
+  dimensionUnit     String           @default("cm")
+  tags              String[]
+  imageUrls         String[]
+  status            ProductStatus    @default(DRAFT)
+  isDigital         Boolean          @default(false)
+  isFeatured        Boolean          @default(false)
+  metaTitle         String?
+  metaDescription   String?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  category          Category?        @relation("ProductCategory", fields: [categoryId], references: [id])
+  subCategory       Category?        @relation("ProductSubCategory", fields: [subCategoryId], references: [id])
+  brand             Brand?           @relation(fields: [brandId], references: [id])
+  embedding         ProductEmbedding?
+
+  @@index([categoryId])
+  @@index([brandId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("products")
+}
+
+model ProductEmbedding {
+  id           String   @id @default(cuid())
+  productId    String   @unique
+  /// @db.Unsupported("vector(384)")
+  embedding    Unsupported("vector(384)")?
+  embeddedText String
+  model        String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  product      Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@map("product_embeddings")
+}
+
+model Category {
+  id          String     @id @default(cuid())
+  name        String
+  slug        String     @unique
+  parentId    String?
+  description String?
+  createdAt   DateTime   @default(now())
+
+  parent      Category?  @relation("CategoryTree", fields: [parentId], references: [id])
+  children    Category[] @relation("CategoryTree")
+  products    Product[]  @relation("ProductCategory")
+  subProducts Product[]  @relation("ProductSubCategory")
+
+  @@map("categories")
+}
+
+model Brand {
+  id          String    @id @default(cuid())
+  name        String
+  slug        String    @unique
+  logoUrl     String?
+  description String?
+  createdAt   DateTime  @default(now())
+
+  products    Product[]
+
+  @@map("brands")
+}
